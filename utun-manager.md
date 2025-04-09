@@ -1,96 +1,149 @@
-I've created a comprehensive utun connection manager script for BoringTun on macOS. The script is now available at 
-/Users/ryanoates/boringtun/utun-manager.sh and has been made executable.
+# utun Interface Manager for BoringTun and Cloudflare WARP
 
-## What the utun-manager.sh script does
+This document provides information about managing utun interfaces on macOS when working with BoringTun and Cloudflare WARP.
 
-This script provides a complete solution for managing WireGuard connections using BoringTun on macOS, with a focus on utun 
-interfaces. It includes:
+## What are utun interfaces?
 
-1. Starting connections with specific utun interfaces
-2. Stopping active connections
-3. Checking connection status
-4. Creating new WireGuard configuration files
-5. Listing available configurations
+"utun" interfaces are virtual network tunnel interfaces on macOS (similar to "tun" interfaces on Linux). They are used to create virtual network adapters that can route traffic through various tunneling protocols, including WireGuard.
 
-## Key Features
+## BoringTun and utun interfaces
 
-• Automatically manages utun interfaces
-• Supports both foreground and background operation
-• Stores configuration files in ~/.wireguard/
-• Logs connection output to ~/.wireguard/logs/
-• Generates WireGuard keys when creating new configurations
-• Handles DNS settings from configuration files
-• Shows active connections with their status
+BoringTun is a userspace implementation of the WireGuard protocol that creates and manages utun interfaces on macOS. When you run BoringTun, it creates a utun interface that can be used to route traffic through the WireGuard tunnel.
 
-## Usage
+### Creating a utun interface with BoringTun
 
-./utun-manager.sh [command] [options]
+To create a utun interface with BoringTun, you can use the following command:
 
-Commands:
-  start <config>     - Start a WireGuard connection using the specified config
-  stop <interface>   - Stop a WireGuard connection on the specified interface
-  status             - Show status of all WireGuard interfaces
-  list               - List available configuration files
-  create <name>      - Create a new configuration file template
-  help               - Show this help message
+```bash
+sudo boringtun-cli --foreground utun
+```
 
-Options:
-  --utun <number>    - Specify utun interface number (default: auto)
-  --foreground       - Run in foreground mode (don't detach)
+This will create a utun interface with the next available number (e.g., utun1, utun2, etc.). If you want to specify a specific utun interface number, you can use:
 
+```bash
+sudo boringtun-cli --foreground utun5
+```
 
-## Examples
+### Listing utun interfaces
 
-### Create a new configuration
+To list all utun interfaces on your system:
 
-bash
-./utun-manager.sh create my-vpn
+```bash
+ifconfig | grep -A1 "utun"
+```
 
+### Checking utun interface status
 
-This will create a template configuration file at ~/.wireguard/my-vpn.conf with a newly generated private key. You'll need to 
-edit this file to add your server's public key and endpoint.
+To check the status of a specific utun interface:
 
-### Start a connection
+```bash
+ifconfig utun1
+```
 
-bash
-./utun-manager.sh start my-vpn
+## Cloudflare WARP and utun interfaces
 
+Cloudflare WARP uses BoringTun as its underlying WireGuard implementation and creates utun interfaces when connected.
 
-This will start a connection in the background using the first available utun interface.
+### Managing WARP connections
 
-To specify a particular utun interface:
+You can use the `warp-cli` command to manage Cloudflare WARP connections:
 
-bash
-./utun-manager.sh start my-vpn --utun 5
+```bash
+# Connect to WARP
+warp-cli connect
 
+# Disconnect from WARP
+warp-cli disconnect
 
-To run in the foreground (useful for debugging):
+# Check WARP status
+warp-cli status
+```
 
-bash
-./utun-manager.sh start my-vpn --foreground
+### Identifying WARP utun interfaces
 
+When WARP is connected, it creates a utun interface. You can identify which utun interface is being used by WARP by checking the routing table:
 
-### Check status
+```bash
+netstat -nr | grep utun
+```
 
-bash
-./utun-manager.sh status
+## Using the boringtun-helper.sh script
 
+The `boringtun-helper.sh` script provides convenient commands for managing BoringTun and WARP:
 
-This will show all active WireGuard interfaces and their configurations.
+```bash
+# Show status of all utun interfaces and running BoringTun instances
+./boringtun-helper.sh status
 
-### Stop a connection
+# Connect to WARP
+./boringtun-helper.sh warp-connect
 
-bash
-./utun-manager.sh stop utun5
+# Disconnect from WARP
+./boringtun-helper.sh warp-disconnect
 
+# Show WARP status
+./boringtun-helper.sh warp-status
+```
 
-Or by configuration name:
+## Troubleshooting utun interfaces
 
-bash
-./utun-manager.sh stop my-vpn
+### Interface already exists
 
+If you get an error that the interface already exists, you can try specifying a different utun number:
 
-The script handles all the necessary setup and teardown of connections, making it easy to manage multiple WireGuard 
-configurations on your macOS system using BoringTun.
+```bash
+sudo boringtun-cli --foreground utun2
+```
 
-> 
+### Permission issues
+
+BoringTun requires administrative privileges to create utun interfaces. Always use `sudo` when running BoringTun directly.
+
+### Removing stale interfaces
+
+Sometimes utun interfaces can remain after a program crashes. You can remove them by rebooting or by using the following command:
+
+```bash
+sudo ifconfig utun1 down
+```
+
+### Checking logs
+
+To check system logs related to utun interfaces:
+
+```bash
+log show --predicate 'subsystem == "com.apple.networking.utun"' --last 30m
+```
+
+## Advanced Configuration
+
+### Setting up routing
+
+To route traffic through a utun interface, you need to configure the routing table:
+
+```bash
+# Route all traffic through utun1
+sudo route add -net 0.0.0.0/0 -interface utun1
+```
+
+### Configuring WireGuard
+
+After creating a utun interface with BoringTun, you can configure it using the `wg` command:
+
+```bash
+sudo wg set utun1 private-key /path/to/private-key peer PEER_PUBLIC_KEY allowed-ips 0.0.0.0/0 endpoint ENDPOINT:PORT
+```
+
+### Using with wg-quick
+
+You can use BoringTun with wg-quick by setting the appropriate environment variables:
+
+```bash
+sudo WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun-cli WG_SUDO=1 wg-quick up /path/to/config
+```
+
+## References
+
+- [BoringTun GitHub Repository](https://github.com/cloudflare/boringtun)
+- [WireGuard Documentation](https://www.wireguard.com/quickstart/)
+- [Cloudflare WARP Documentation](https://developers.cloudflare.com/warp-client/)
