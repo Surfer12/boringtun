@@ -24,12 +24,19 @@ show_help() {
     echo "  run [iface]   - Run boringtun-cli with the specified interface name"
     echo "                  (defaults to 'utun' on macOS if not specified)"
     echo "  wg-quick [config] - Run with wg-quick using the specified config file"
+    echo "  status        - Show running boringtun-cli instances and interfaces"
+    echo "  warp          - Show Cloudflare WARP status and commands"
+    echo "  warp-connect  - Connect to Cloudflare WARP"
+    echo "  warp-disconnect - Disconnect from Cloudflare WARP"
+    echo "  warp-status   - Show Cloudflare WARP connection status"
     echo "  help          - Show this help message"
     echo ""
     echo "Examples:"
     echo "  ./boringtun-helper.sh build"
     echo "  ./boringtun-helper.sh run utun5"
     echo "  ./boringtun-helper.sh wg-quick wg0-client"
+    echo "  ./boringtun-helper.sh status"
+    echo "  ./boringtun-helper.sh warp-connect"
 }
 
 # Function to build boringtun-cli in release mode
@@ -141,6 +148,21 @@ case "$1" in
     wg-quick)
         run_wg_quick "$2"
         ;;
+    status)
+        show_status
+        ;;
+    warp)
+        warp_commands
+        ;;
+    warp-connect)
+        warp_connect
+        ;;
+    warp-disconnect)
+        warp_disconnect
+        ;;
+    warp-status)
+        warp_status
+        ;;
     help|--help|-h)
         show_help
         ;;
@@ -150,3 +172,125 @@ case "$1" in
         exit 1
         ;;
 esac
+# Function to show status of running boringtun-cli instances
+show_status() {
+    echo -e "${BLUE}Checking for running boringtun-cli instances...${NC}"
+    
+    # Check for running processes
+    echo -e "${YELLOW}Running processes:${NC}"
+    if pgrep -f "boringtun-cli" > /dev/null; then
+        ps aux | grep -v grep | grep "boringtun-cli"
+    else
+        echo -e "  ${RED}No boringtun-cli processes found${NC}"
+    fi
+    
+    # On macOS, check for utun interfaces
+    if [ "$(uname)" == "Darwin" ]; then
+        echo -e "\n${YELLOW}Network interfaces:${NC}"
+        ifconfig | grep -A1 "utun" | grep -v "^$"
+    # On Linux, check for tun/wireguard interfaces
+    elif [ "$(uname)" == "Linux" ]; then
+        echo -e "\n${YELLOW}Network interfaces:${NC}"
+        ip link show | grep -E "tun|wg"
+    fi
+    
+    # Check WireGuard interfaces if wg command is available
+    if command -v wg &> /dev/null; then
+        echo -e "\n${YELLOW}WireGuard interfaces:${NC}"
+        sudo wg show all 2>/dev/null || echo -e "  ${RED}No WireGuard interfaces found or permission denied${NC}"
+    fi
+}
+# Function to handle Cloudflare WARP commands
+warp_commands() {
+    # Check if warp-cli is installed
+    if ! command -v warp-cli &> /dev/null; then
+        echo -e "${RED}Error: warp-cli not found. Please install Cloudflare WARP first.${NC}"
+        echo -e "${YELLOW}Visit: https://developers.cloudflare.com/warp-client/get-started/linux/${NC}"
+        exit 1
+    fi
+
+    echo -e "${BLUE}Cloudflare WARP CLI Commands${NC}"
+    echo -e "${YELLOW}Available commands:${NC}"
+    echo "  warp-cli register                - Register the WARP client"
+    echo "  warp-cli connect                 - Connect to WARP"
+    echo "  warp-cli disconnect              - Disconnect from WARP"
+    echo "  warp-cli status                  - Show connection status"
+    echo "  warp-cli enable-always-on        - Enable always-on mode"
+    echo "  warp-cli disable-always-on       - Disable always-on mode"
+    echo "  warp-cli warp-stats              - Show WARP connection statistics"
+    echo "  warp-cli settings                - Show current settings"
+    echo "  warp-cli account                 - Show account information"
+    echo "  warp-cli teams-enroll [token]    - Enroll in Cloudflare for Teams"
+    echo "  warp-cli teams-unenroll          - Unenroll from Cloudflare for Teams"
+    echo ""
+    echo -e "${YELLOW}Use this helper script for common operations:${NC}"
+    echo "  ./boringtun-helper.sh warp-connect    - Connect to WARP"
+    echo "  ./boringtun-helper.sh warp-disconnect - Disconnect from WARP"
+    echo "  ./boringtun-helper.sh warp-status     - Show connection status"
+}
+
+# Function to connect to Cloudflare WARP
+warp_connect() {
+    echo -e "${BLUE}Connecting to Cloudflare WARP...${NC}"
+    
+    # Check if warp-cli is installed
+    if ! command -v warp-cli &> /dev/null; then
+        echo -e "${RED}Error: warp-cli not found. Please install Cloudflare WARP first.${NC}"
+        exit 1
+    fi
+    
+    # Connect to WARP
+    warp-cli connect
+    
+    # Check status after connecting
+    sleep 2
+    warp-cli status
+}
+
+# Function to disconnect from Cloudflare WARP
+warp_disconnect() {
+    echo -e "${BLUE}Disconnecting from Cloudflare WARP...${NC}"
+    
+    # Check if warp-cli is installed
+    if ! command -v warp-cli &> /dev/null; then
+        echo -e "${RED}Error: warp-cli not found. Please install Cloudflare WARP first.${NC}"
+        exit 1
+    fi
+    
+    # Disconnect from WARP
+    warp-cli disconnect
+    
+    # Check status after disconnecting
+    sleep 2
+    warp-cli status
+}
+
+# Function to show Cloudflare WARP status
+warp_status() {
+    echo -e "${BLUE}Checking Cloudflare WARP status...${NC}"
+    
+    # Check if warp-cli is installed
+    if ! command -v warp-cli &> /dev/null; then
+        echo -e "${RED}Error: warp-cli not found. Please install Cloudflare WARP first.${NC}"
+        exit 1
+    fi
+    
+    # Show WARP status
+    echo -e "${YELLOW}Connection status:${NC}"
+    warp-cli status
+    
+    echo -e "\n${YELLOW}WARP statistics:${NC}"
+    warp-cli warp-stats
+    
+    echo -e "\n${YELLOW}Current settings:${NC}"
+    warp-cli settings
+    
+    # Check if account info is available
+    if warp-cli account 2>/dev/null | grep -q "Account type"; then
+        echo -e "\n${YELLOW}Account information:${NC}"
+        warp-cli account
+    fi
+}
+
+# Show success message
+echo -e "${GREEN}BoringTun helper script executed successfully!${NC}"
