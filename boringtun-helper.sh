@@ -56,7 +56,16 @@ build_lib() {
 # Function to install boringtun-cli
 install_boringtun() {
     echo -e "${BLUE}Installing boringtun-cli...${NC}"
-    cargo install --bin boringtun-cli --path .
+    
+    # Check if we're in a workspace and need to specify the package
+    if grep -q "^\[workspace\]" Cargo.toml; then
+        echo -e "${YELLOW}Detected workspace configuration, installing from crates.io...${NC}"
+        cargo install boringtun-cli
+    else
+        # If not in a workspace, try to install from the local path
+        cargo install --bin boringtun-cli --path .
+    fi
+    
     echo -e "${GREEN}Installation complete!${NC}"
 }
 
